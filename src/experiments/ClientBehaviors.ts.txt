@@ -1,0 +1,82 @@
+
+this.silent = (isDeniable) => {
+    console.log(`[${classArgs.clientName.name()}] In behavior: SILENT`);
+}
+
+this.messageReceived = async (message) => {
+    if(message) { //response received
+        if(message.deniable){
+
+            if(classArgs.deniableResponseBehavior=='group') { // If we're a leader we have to forward
+                const groups = classArgs.deniableGroups;
+                for(const group of groups) { // Check if we're leader for any of the groups
+                    if(classArgs.clientName.name() == group.leader.name()) {
+                        console.log(`[${classArgs.clientName.name()}] forwarding to group members`);
+                        for(const member of group.members) {
+                            let content = message.message;
+                            console.log(`Forwarding ${content} to ${member.name()}`);
+                            await classArgs.send(new classArgs.Message(content, classArgs.clientName, member, message.deniable, classArgs.Constants.MESSAGE_TYPE_TEXT));  
+                        }
+                    } 
+                }
+            } 
+
+            await this[classArgs.deniableResponseBehavior](true);
+        } else {
+
+            if(classArgs.regularResponseBehavior=='group') { // If we're a leader we have to forward
+                const groups = classArgs.regularGroups;
+                for(const group of groups) { // Check if we're leader for any of the groups
+                    if(classArgs.clientName.name() == group.leader.name()) {
+                        console.log(`[${classArgs.clientName.name()}] forwarding to ${group.members.length} group members`);
+                        for(const member of group.members) {
+                            let content = message.message;
+                            console.log(`Forwarding ${content} to ${member.name()}`);
+                            await classArgs.send(new classArgs.Message(content, classArgs.clientName, member, message.deniable, classArgs.Constants.MESSAGE_TYPE_TEXT));  
+                        }
+                    } 
+                }
+            } 
+            await this[classArgs.regularResponseBehavior](false);
+        }
+    }
+}
+
+this.group = async (isDeniable) => {
+    console.log(`[${classArgs.clientName.name()}] In behavior: GROUP, called with deniable: ${isDeniable}`);
+    let groups;
+    if(isDeniable){
+        groups = classArgs.deniableGroups;
+    } else {
+        groups = classArgs.regularGroups;
+    }
+
+    for(const group of groups) { // Members decide for each group whether to send a message or not
+
+        if(classArgs.clientName.name() != group.leader.name()) {
+            const probabilityToSend = 1./(group.members.length+1); // +1 since we've filtered out ourselves
+            const sendNow = classArgs.Util.doWithProbability(probabilityToSend);
+
+            if(sendNow){
+                console.log(`[${classArgs.clientName.name()}] sending to group leader ${group.leader.name()} (probability: ${probabilityToSend})`);
+                let content = `${classArgs.Util.getDelimitedTimestamp()}${classArgs.Util.getQuote()}`;
+                await classArgs.send(new classArgs.Message(content, classArgs.clientName, group.leader, isDeniable, classArgs.Constants.MESSAGE_TYPE_TEXT));  
+            } else {
+                console.log(`[${classArgs.clientName.name()}] skipping a round (probability: ${probabilityToSend})`);
+            }
+        }
+    }
+}
+
+this.bazaar = async (isDeniable) => {
+    console.log(`[${classArgs.clientName.name()}] In behavior: BAZAAR, called with parameter ${isDeniable}`);
+    let contacts;
+    if(isDeniable) {
+        contacts = classArgs.deniableContacts;
+    } else {
+        contacts = classArgs.regularContacts;
+    }
+    const toContact = classArgs.Util.choose(contacts);
+    const content = `${classArgs.Util.getDelimitedTimestamp()}${classArgs.Util.getQuote()}`;
+    await classArgs.send(new classArgs.Message(content, classArgs.clientName, toContact, isDeniable, classArgs.Constants.MESSAGE_TYPE_TEXT));
+}

@@ -1,0 +1,39 @@
+{
+  "scripts": {
+    "build": "tsc",
+    "server": "ts-node ./build/src/WSServer.js --debugutil --debugserver",
+    "clients": "ts-node ./build/src/experiments/SpawnClients.js",
+    "test": "ts-node node_modules/tape/bin/tape test/**/*.ts",
+    "fast-check": "ts-node test/ChunkingLogicQC.ts",
+    "proto": "pbjs --es6 -t static-module -w es6 src/proto/*.proto -o src/proto-generated/compiled.js;pbts --copy-imports --no-comments -o src/proto-generated/compiled.d.ts src/proto-generated/compiled.js"
+  },
+  "dependencies": {
+    "@signalapp/libsignal-client": "^0.15.0",
+    "fast-check": "^2.25.0",
+    "fastq": "^1.13.0",
+    "gc-stats": "^1.4.1",
+    "mathjs": "^10.4.2",
+    "microseconds": "^0.2.0",
+    "pidusage": "^3.0.0",
+    "protobufjs": "^6.11.2",
+    "protobufjs-cli-dbx": "^7.0.7",
+    "protobufjs-dbx": "^7.0.0",
+    "random-quotes": "^1.3.0",
+    "random-seed": "^0.3.0",
+    "relative-microtime": "^2.0.0",
+    "websocket": "^1.0.34",
+    "winston": "^3.6.0",
+    "yargs": "^17.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^17.0.23",
+    "@types/pidusage": "^2.0.2",
+    "@types/random-seed": "^0.3.3",
+    "@types/tape": "^4.13.2",
+    "tape": "^5.5.2",
+    "ts-node": "^10.7.0"
+  },
+  "engines": {
+    "node": ">=16.14.0"
+  }
+}

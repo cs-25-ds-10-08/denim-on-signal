@@ -1,0 +1,118 @@
+package denim_proto;
+syntax="proto3";
+
+message UserMessage {
+	required ProtocolAddress address = 1; //sender or receiver
+	required int32 signal_message_type = 2;
+	required bytes signal_message = 3;
+}
+
+message BlockRequest {
+	required string blocked_uuid = 1;
+}
+
+message KeyRequest {
+	required ProtocolAddress address = 1;
+}
+
+message KeyResponse {
+	required ProtocolAddress address = 1;
+	required KeyBundle key_bundle = 2;
+}
+
+message KeyRefill {
+	repeated KeyTuple keys = 1;
+}
+
+message StatusMessage {
+	required int32 keys_left = 1;
+}
+
+message InvalidRequest {
+	required string error = 1;
+	optional ProtocolAddress receiver = 2;
+}
+
+message DummyPadding {
+	required bytes padding = 1;
+}
+
+message DeniablePayload {
+	oneof message_kind {
+		BlockRequest block_request = 1;
+		UserMessage user_message = 2; 
+		KeyRequest key_request = 3;
+		KeyResponse key_response = 4;
+		KeyRefill key_refill = 5;
+		StatusMessage status_message = 6;
+		DummyPadding dummy = 7;
+		InvalidRequest error = 8;
+	}
+}
+
+message RegularPayload {
+	oneof message_kind {
+		BlockRequest block_request = 1;
+		UserMessage user_message = 2; 
+		KeyRequest key_request = 3;
+		KeyResponse key_response = 4;
+		KeyRefill key_refill = 5;
+		StatusMessage status_message = 6;
+		MidTermKeyUpdate key_update = 7;
+		Register register_user = 8;
+		InvalidRequest error = 9;
+	}
+}
+
+
+message DenimChunk {
+	required bytes chunk = 1;
+	required int32 flags = 2;
+}
+
+message DenimMessage {
+	required bytes regular_payload = 1;
+	repeated DenimChunk chunks = 2;
+	optional int32 counter = 3; //only for server -> client
+	optional double q = 4; //only for server -> client
+	required int32 ballast = 5;
+	optional int32 extra_ballast = 6;
+}
+
+message MidTermKeyUpdate {
+	required SignedKeyTuple key = 1;
+}
+
+message Register {
+	required ProtocolAddress address = 1;
+	required bytes id_key = 2;
+	required int32 registration_id = 3; //(0, 16380)
+	required SignedKeyTuple mid_term_key = 4;
+	repeated KeyTuple ephemeral_keys = 5;
+	repeated KeyTuple deniable_ephemeral_keys = 6;
+	required bytes key_generator_seed = 7; // 32 byte seed
+	required bytes key_id_generator_seed = 8; // 32 *bit* seed
+}
+
+message ProtocolAddress {
+	required string name = 1;
+	required int32 device_id = 2;
+}
+
+message KeyTuple {
+	required int32 id = 1;
+	required bytes key = 2;
+}
+
+message SignedKeyTuple {
+	required KeyTuple tuple = 1;
+	required bytes signature = 2;
+}
+
+message KeyBundle {
+	required int32 registration_id = 1; //(0, 16380)
+	required int32 device_id = 2;
+	optional KeyTuple ephemeral_key = 3;
+	required SignedKeyTuple mid_term_key = 4;
+	required bytes id_key = 5;
+}
