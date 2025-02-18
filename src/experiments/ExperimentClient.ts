@@ -48,15 +48,6 @@ let regularKeys = new Map<string, string>();
 let queuedRegularMessages = new Array<Message>();
 let queuedDeniableMessages = new Array<Message>();
 
-//Structures to store statistics
-let plaintextOverhead = new Array<{plaintextLength:any, encryptedPayloadByteLength:any, denimMsgByteLength:any}>();
-let deniableLatencyOverhead = new Array<{sent:any, received:any, plaintextLength:any}>();
-let regularLatencyOverhead = new Array<{sent:any, received:any, plaintextLength:any}>();
-let deniableBufferLength = new Array<{timestamp:any, deniableBufferLength:any}>();
-let cumulativeDeniable = new Array<{timestamp:any, cumulativeDeniable:any}>();
-let deniableCreated = 0;
-
-
 let serverConnections = new Map<string, any>();
 
 let json; // Contains all experiment parameters and code
@@ -92,64 +83,6 @@ process.on('exit', function (exitcode) {
     info(`${getPrintName()} exiting with code ${exitcode}; ongoing connections: ${serverConnections.values?.length}`);
 });
 
-
-function saveStatistics() {
-
-    info(`Saving statistics...`);
-
-    let outputPath = `output/client_${denimClient.address.name()}/${currentRun}`;
-    Util.createFolder(outputPath);
-
-    fs.writeFileSync(`${outputPath}/incoming-queue-length-client_${denimClient.address.name()}.csv`,  `Unprocessed,${denimClient.incomingCounter}\nProcessed,${denimClient.processedCounter}\nSnapshotcounter,${denimClient.snapshotCounter}\nProcessedRegularMessages,${denimClient.processedRegularMessages}\nProcessedDeniableMessages,${denimClient.processedDeniableMessages}`, function (err,data) {
-        if (err) {
-          return console.log(err);
-        }
-    }); 
-
-    plaintextOverhead.unshift({plaintextLength:"plaintext_char_length", encryptedPayloadByteLength:"encrypted_regular_payload_bytes", denimMsgByteLength:"denim_message_bytes"});
-    fs.writeFileSync(`${outputPath}/bandwidth-overhead-regular-client_${denimClient.address.name()}.csv`, plaintextOverhead.map(
-        (data) => `${data.plaintextLength},${data.encryptedPayloadByteLength},${data.denimMsgByteLength}`).join("\n"), function (err,data) {
-        if (err) {
-          return console.log(err);
-        }
-    }); 
-
-    deniableLatencyOverhead.unshift({sent:"sent_timestamp_us", received:"received_timestamp_us", plaintextLength:"plaintext_char_length"});
-    fs.writeFileSync(`${outputPath}/latency-deniable-client_${denimClient.address.name()}.csv`, deniableLatencyOverhead.map(
-        (data) => `${data.sent},${data.received},${data.plaintextLength}`).join("\n"), function (err,data) {
-        if (err) {
-          return console.log(err);
-        }
-    }); 
-
-    regularLatencyOverhead.unshift({sent:"sent_timestamp_us", received:"received_timestamp_us", plaintextLength:"plaintext_char_length"});
-    fs.writeFileSync(`${outputPath}/latency-regular-client_${denimClient.address.name()}.csv`, regularLatencyOverhead.map(
-        (data) => `${data.sent},${data.received},${data.plaintextLength}`).join("\n"), function (err,data) {
-        if (err) {
-          return console.log(err);
-        }
-    }); 
-
-    deniableBufferLength.unshift({timestamp:"timestamp_us", deniableBufferLength:"encrypted_deniable_payloads_queued"});
-    fs.writeFileSync(`${outputPath}/deniable-buffer-status-client_${denimClient.address.name()}.csv`, deniableBufferLength.map(
-        (data) => `${data.timestamp},${data.deniableBufferLength}`).join("\n"), function (err,data) {
-        if (err) {
-          return console.log(err);
-        }
-    }); 
-
-    cumulativeDeniable.unshift({timestamp:"timestamp_us", cumulativeDeniable:"deniable_created"});
-    fs.writeFileSync(`${outputPath}/deniable-created-client_${denimClient.address.name()}.csv`, cumulativeDeniable.map(
-        (data) => `${data.timestamp},${data.cumulativeDeniable}`).join("\n"), function (err,data) {
-        if (err) {
-          return console.log(err);
-        }
-    });
-
-    evictStatistics();
-
-}
-
 function initExperimentClient(onMessage, initialMessage, serverAddress, protocol): Promise<t> {
     return new Promise ((resolve, reject) => {
         let client = new WebSocketClient({tlsOptions:{rejectUnauthorized: false}})
@@ -171,7 +104,6 @@ function initExperimentClient(onMessage, initialMessage, serverAddress, protocol
                 if(connection.protocol===Constants.PROTOCOL) {
                     // Report back to dispatcher
                     info(`${getPrintName()} Socket closed`);
-                    saveStatistics();
                     currentRun++;
                     send(Constants.CLIENT_DONE);
                     info(`${getPrintName()} Sent CLIENT_DONE to Dispatcher`)
@@ -202,46 +134,18 @@ async function processIncomingDenimMessage(data) {
 
     // Defensive check to make sure experiment is running...
     if(stateExperimentOngoing) {
-
-        // Statistics builders here
-        let plaintextLength;
-        let encryptedPayloadByteLength;
-        let denimMsgByteLength;
-        
         // Deserialize message
         const denimMsg = denim_proto.DenimMessage.decode(data.binaryData);
-        denimMsgByteLength = data.binaryData.length;
-
         const processedMessages:Array<Message> = await denimClient.process(denimMsg);
-        encryptedPayloadByteLength = denimMsg.regularPayload.byteLength;
 
         for(const processedMessage of processedMessages){
-
             let msg = processedMessage.message;
-            plaintextLength = Buffer.byteLength(msg, 'utf8'); 
-            if(!processedMessage.deniable) {
-                // Only save for regular messages
-                plaintextOverhead.push({plaintextLength:plaintextLength, encryptedPayloadByteLength:encryptedPayloadByteLength, denimMsgByteLength:denimMsgByteLength});
-            }
-
             // User message received, pass to behavior code
             if(processedMessage.messageType==Constants.MESSAGE_TYPE_TEXT) {
                 info(`Message received: ${processedMessage}`);
-
-                // Extract statistics
-                let endIndex = msg.indexOf(Constants.MESSAGE_TIMESTAMP_END_DELIMITER); // Not inclusive..!
-                let startIndex = msg.indexOf(Constants.MESSAGE_TIMESTAMP_START_DELIMITER)+Constants.MESSAGE_TIMESTAMP_START_DELIMITER.length;
-                let timestamp = Number.parseInt(msg.slice(startIndex, endIndex)); // [start,stop)
-                if(!processedMessage.deniable) {
-                    regularLatencyOverhead.push({sent:timestamp, received:received, plaintextLength:msg.length});
-                } else {
-                    deniableLatencyOverhead.push({sent:timestamp, received:received, plaintextLength:msg.length});
-                }
-
                 // Call behavior code
                 await code[printMessageReceived](processedMessage);
             } else if(processedMessage.messageType==Constants.MESSAGE_TYPE_KEY_RESPONSE) {
-
                 // Check if deniable or regular and keep separate tables
                 const receivedAddress = Util.signalAddressToString(processedMessage.sender);
                 info(`Key response received for user: ${receivedAddress}`);
@@ -329,8 +233,6 @@ async function processOutgoingDenimMessage(data:Message) {
                 // Defensive check to make sure experiment is running...
                 if(stateExperimentOngoing) {
                     denimSend(denimMsg);
-                    // Measure length of the encrypted deniable payloads queued after sending
-                    deniableBufferLength.push({timestamp:Util.getRelativeTimeMicroseconds(), deniableBufferLength:this.denimClient.outgoingDeniable.length});
                 } else {
                     error(`${getPrintName()} attempted to send message after run ended`);
                 }
@@ -344,17 +246,11 @@ async function processOutgoingDenimMessage(data:Message) {
                 deniableKeys.set(receiverAddress, Constants.KEY_STATE_IN_FLIGHT);
                 info(`${denimClient.address.name()} queuing deniable key request for ${receiverAddress}`);
                 denimClient.queueDeniableKeyRequest(data.receiver);
-                cumulativeDeniable.push({timestamp:Util.getRelativeTimeMicroseconds(), cumulativeDeniable:++deniableCreated});
                 queuedDeniableMessages.push(data);
             } else if(keyStatus==Constants.KEY_STATE_RECEIVED) {
                 await denimClient.createDeniableMessage(data.message, data.receiver);
-                // Stats
-                cumulativeDeniable.push({timestamp:Util.getRelativeTimeMicroseconds(), cumulativeDeniable:++deniableCreated});
-                // Measure length of the deniable buffer
-                deniableBufferLength.push({timestamp:Util.getRelativeTimeMicroseconds(), deniableBufferLength:denimClient.outgoingDeniable.length});
             } else if(keyStatus==Constants.KEY_STATE_IN_FLIGHT) {
                 queuedDeniableMessages.push(data);
-                cumulativeDeniable.push({timestamp:Util.getRelativeTimeMicroseconds(), cumulativeDeniable:++deniableCreated});
             }
         }
     } else {
@@ -462,7 +358,6 @@ const onMessage = async (data) => {
             
             // Fresh data structures
             cleanUp();
-            evictStatistics();
 
             // Driver to start experiment
             messageEmitter.on('event', code[printMessageReceived]); // Prints messages and then branches on behavior
@@ -479,7 +374,6 @@ const onMessage = async (data) => {
                         await code[regularSendBehavior](false);
                     }
                 }
-                
                 
                 const deniableProbability = json.deniable_probability;
                 if(deniableProbability >0) {
@@ -515,7 +409,6 @@ const onMessage = async (data) => {
     } else { // Denim server messages
         info(data.binaryData)
     }
-
 }
 
 async function main() {
@@ -531,15 +424,6 @@ function cleanUp() {
     regularKeys = new Map<string, string>();
     queuedRegularMessages = new Array<Message>();
     queuedDeniableMessages = new Array<Message>();
-}
-
-function evictStatistics() {
-    plaintextOverhead = new Array<{plaintextLength:any, encryptedPayloadByteLength:any, denimMsgByteLength:any}>(); // Statistics
-    deniableLatencyOverhead = new Array<{sent:any, received:any, plaintextLength:any}>(); // Statistics
-    regularLatencyOverhead = new Array<{sent:any, received:any, plaintextLength:any}>(); // Statistics
-    deniableBufferLength = new Array<{timestamp:any, deniableBufferLength:any}>();
-    cumulativeDeniable = new Array<{timestamp:any, cumulativeDeniable:any}>();
-    deniableCreated = 0;
 }
 
 main();

@@ -72,11 +72,6 @@ let wsServer = new WebSocketServer({
     autoAcceptConnections: false
 });
 
-function originIsAllowed(origin) {
-  // put logic here to detect whether the specified origin is allowed.
-  return true;
-}
-
 function sendInstructions() {
     
     let instructions = {
@@ -234,13 +229,6 @@ function sendInstructions() {
 
 
 wsServer.on('request',(request) => {
-    if (!originIsAllowed(request.origin)) {
-      // Make sure we only accept requests from an allowed origin
-      request.reject();
-      debug((new Date()) + ' Connection from origin ' + request.origin + ' rejected.');
-      return;
-    }
-    
     let connection = request.accept(Constants.EXPERIMENT_PROTOCOL, request.origin);
     debug((new Date()) + ' Connection accepted.');
     connection.on('message', (message) => {
@@ -309,7 +297,6 @@ wsServer.on('request',(request) => {
                         let connections = addressToConnection.values();
                         for(const connection of connections) {
                             connection.send(Constants.SERVER_EXPERIMENT_DONE);
-                            
                         }
                         sendToDenimServer(Constants.SERVER_EXPERIMENT_DONE);
                         process.exit(0);
