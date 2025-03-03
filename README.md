@@ -64,7 +64,7 @@ Generates output to:
 ### Clients
 Start the desired amount of clients, connecting to the Dispatcher on a given IP, e.g.:
 
-`./startClients "5" "127.0.0.1"`
+`./startClients.sh "5" "127.0.0.1"`
 
 Generates output to:
 `./output/`
