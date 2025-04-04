@@ -111,23 +111,28 @@ function sendInstructions() {
       instructions.deniable_response_behavior = Constants.BEHAVIOR_SILENT;
     }
 
+    // Make groups my creating lists of addresses and distrubute them accordingly [1,3,5,7]
+    let regular_groups = [allAddresses.filter((addr) => addr % 2 == 0), allAddresses.filter((addr) => addr % 2 == 1)]
+    let deniable_groups = regular_groups[0].map((_, colIndex) => regular_groups.map(row => row[colIndex]))
+
     let connections = Array.from(addressToConnection.values());
-    let i = 1;
+    let i = 0;
     for (const connection of connections) {
       instructions.client_name = connectionToAddress.get(connection);
 
-      if (i <= 2) {
-        let copy = { ...instructions };
-        let address = connectionToAddress.get(connections[i++ % 2]);
-        copy.client_addresses_regular = copy.client_addresses_regular.filter((addr) => addr != address)
-        copy.client_addresses_deniable = [address];
+      let copy = { ...instructions };
 
-        connection.send(Constants.SERVER_INSTRUCTIONS + "\n" + JSON.stringify(copy));
-        console.log(copy.client_name)
-        continue;
+      if (copy.client_name == "0") {
+        copy.client_addresses_regular = ["1"];
+      } else if (copy.client_name == "1") {
+        copy.client_addresses_regular = ["0"]
+      } else {
+        copy.client_addresses_regular = regular_groups[i % 2]
       }
 
-      connection.send(Constants.SERVER_INSTRUCTIONS + "\n" + JSON.stringify(instructions));
+      copy.client_addresses_deniable = deniable_groups[Math.floor(i++ / 2)];
+
+      connection.send(Constants.SERVER_INSTRUCTIONS + "\n" + JSON.stringify(copy));
     }
 
   } else if (scenario === Constants.EXPERIMENT_SCENARIO_DENIABLE_LATENCY) {

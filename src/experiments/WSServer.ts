@@ -35,8 +35,8 @@ fs.writeFileSync(`${outputDir}/server-settings.json`, `{\n    "q":${q}\n}`);
 
 let server = https.createServer(
   {
-    key: fs.readFileSync('ssl-cert/key.pem')
-    , cert: fs.readFileSync('ssl-cert/cert.pem')
+    key: fs.readFileSync('ssl-cert/key.pem'),
+    cert: fs.readFileSync('ssl-cert/cert.pem')
   }
   , function(request, response) {
     info((new Date()) + ' Received request for ' + request.url);
