@@ -70,13 +70,26 @@ this.group = async (isDeniable) => {
 
 this.bazaar = async (isDeniable) => {
     console.log(`[${classArgs.clientName.name()}] In behavior: BAZAAR, called with parameter ${isDeniable}`);
-    let contacts;
     if(isDeniable) {
-        contacts = classArgs.deniableContacts;
-    } else {
+        let q = 0.1;
+        let contacts = classArgs.deniableContacts;
+        const toDContact = classArgs.Util.choose(contacts);
+        const dcontent = `${classArgs.Util.getDelimitedTimestamp()}${classArgs.Util.getQuote()}`;
+        await classArgs.send(new classArgs.Message(dcontent, classArgs.clientName, toDContact, isDeniable, classArgs.Constants.MESSAGE_TYPE_TEXT));
+        
         contacts = classArgs.regularContacts;
+        const toRContact = classArgs.Util.choose(contacts);
+        const rcontent = `${classArgs.Util.getDelimitedTimestamp()}${classArgs.Util.getQuote()}`;
+        let n = Math.ceil(dcontent.length / (rcontent.length * q));
+        console.log(`n = ${n}`);
+        for (let i = 0; i < n; i++) {
+            await classArgs.send(new classArgs.Message(rcontent, classArgs.clientName, toRContact, !isDeniable, classArgs.Constants.MESSAGE_TYPE_TEXT));
+        }
+    } else {
+        let contacts = classArgs.regularContacts;
+        const toContact = classArgs.Util.choose(contacts);
+        const content = `${classArgs.Util.getDelimitedTimestamp()}${classArgs.Util.getQuote()}`;
+        await classArgs.send(new classArgs.Message(content, classArgs.clientName, toContact, isDeniable, classArgs.Constants.MESSAGE_TYPE_TEXT));
     }
-    const toContact = classArgs.Util.choose(contacts);
-    const content = `${classArgs.Util.getDelimitedTimestamp()}${classArgs.Util.getQuote()}`;
-    await classArgs.send(new classArgs.Message(content, classArgs.clientName, toContact, isDeniable, classArgs.Constants.MESSAGE_TYPE_TEXT));
 }
+

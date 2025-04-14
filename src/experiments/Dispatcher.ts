@@ -122,14 +122,7 @@ function sendInstructions() {
 
       let copy = { ...instructions };
 
-      if (copy.client_name == "0") {
-        copy.client_addresses_regular = ["1"];
-      } else if (copy.client_name == "1") {
-        copy.client_addresses_regular = ["0"]
-      } else {
-        copy.client_addresses_regular = regular_groups[i % 2]
-      }
-
+      copy.client_addresses_regular = regular_groups[i % 2];
       copy.client_addresses_deniable = deniable_groups[Math.floor(i++ / 2)];
 
       connection.send(Constants.SERVER_INSTRUCTIONS + "\n" + JSON.stringify(copy));

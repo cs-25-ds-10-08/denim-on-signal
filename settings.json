@@ -1,0 +1,18 @@
+{
+    "number_of_clients":20,
+    "experiment_duration_ms":6000000,
+    "event_ticks_ms":1000,
+    "regular_message_per_tick":1,
+    "deniable_message_per_tick":1,
+    "regular_behavior_probability":1,
+    "deniable_behavior_probability":1,
+    "number_regular_ephemerals":10,
+    "number_deniable_ephemerals":20,
+    "message_length":1,
+    "scenario":"REGULAR_BAZAAR_DENIABLE_BAZAAR",
+    "number_regular_groups":6,
+    "number_deniable_groups":2,
+    "clients_respond_on_message_received":true,
+    "runs":1,
+    "denim_server_address":"wss://127.0.0.1:8080/"
+}
