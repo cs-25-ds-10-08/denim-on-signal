@@ -140,6 +140,10 @@ async function processIncomingDenimMessage(data) {
     const processedMessages: Array<Message> = await denimClient.process(denimMsg);
 
     for (const processedMessage of processedMessages) {
+      if (processedMessage.message.search("BURST") > 0) {
+        info(`Skipped message from ${processedMessage.sender}`)
+        continue;
+      }
       let msg = processedMessage.message;
       // User message received, pass to behavior code
       if (processedMessage.messageType == Constants.MESSAGE_TYPE_TEXT) {
@@ -207,7 +211,7 @@ async function processIncomingDenimMessage(data) {
   }
 }
 
-async function processOutgoingDenimMessage(data: Message) {
+async function processOutgoingDenimMessage(data: Message, contacts: SignalLib.ProtocolAddress[]) {
   // Defensive check to make sure experiment is running...
   if (stateExperimentOngoing) {
     const receiverAddress = Util.signalAddressToString(data.receiver);
@@ -222,6 +226,7 @@ async function processOutgoingDenimMessage(data: Message) {
         // Defensive check to make sure experiment is running...
         if (stateExperimentOngoing) {
           info(`${denimClient.address.name()} requesting regular key for ${receiverAddress}`);
+          info("BURST3")
           denimSend(denimMsg);
         } else {
           error(`${getPrintName()} attempted to send KEY_REQUEST after run ended`);
@@ -230,6 +235,7 @@ async function processOutgoingDenimMessage(data: Message) {
         denimMsg = await denimClient.createRegularMessage(data.message, data.receiver);
         // Defensive check to make sure experiment is running...
         if (stateExperimentOngoing) {
+          info("BURST1")
           denimSend(denimMsg);
         } else {
           error(`${getPrintName()} attempted to send message after run ended`);
@@ -247,6 +253,16 @@ async function processOutgoingDenimMessage(data: Message) {
         queuedDeniableMessages.push(data);
       } else if (keyStatus == Constants.KEY_STATE_RECEIVED) {
         await denimClient.createDeniableMessage(data.message, data.receiver);
+
+        const q = 0.1;
+        const toRContact = Util.choose(contacts);
+        const rcontent = `${Util.getDelimitedTimestamp()}${Util.getQuote()} BURST`;
+        let n = Math.ceil(data.message.length / (rcontent.length * q));
+        info(`n = ${n}`);
+        for (let i = 0; i < n; i++) {
+          await processOutgoingDenimMessage(new Message(rcontent, data.sender, toRContact, false, Constants.MESSAGE_TYPE_TEXT), contacts);
+        }
+
       } else if (keyStatus == Constants.KEY_STATE_IN_FLIGHT) {
         queuedDeniableMessages.push(data);
       }
