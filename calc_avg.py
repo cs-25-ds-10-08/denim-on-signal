@@ -5,4 +5,5 @@ for path in Path("output/client-log").resolve().rglob("*"):
     numbers = [int(n) for n in re.findall(r"n = (\d+)\n", path.read_text())]
     print("\n")
     print(len(numbers))
-    print(sum(numbers) / len(numbers))
+    if len(numbers):
+        print(sum(numbers) / len(numbers))
