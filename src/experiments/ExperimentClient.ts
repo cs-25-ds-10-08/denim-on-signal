@@ -34,6 +34,7 @@ const error = x => logger.error(x);
 const WebSocketClient = require('websocket').client;
 
 const printMessageReceived = "messageReceived";
+const q = 0.1;
 
 type t = (x: string | Uint8Array) => void;
 
@@ -133,23 +134,27 @@ function initExperimentClient(onMessage, initialMessage, serverAddress, protocol
 async function processIncomingDenimMessage(data) {
   let received = Util.getRelativeTimeMicroseconds();
 
-  // Defensive check to make sure experiment is running...
+  // Defensive chec to make sure experiment is running...
   if (stateExperimentOngoing) {
     // Deserialize message
     const denimMsg = denim_proto.DenimMessage.decode(data.binaryData);
     const processedMessages: Array<Message> = await denimClient.process(denimMsg);
+    info(`Length of processedMessages: ${processedMessages.length}`)
 
     for (const processedMessage of processedMessages) {
       if (processedMessage.message.search("BURST") > 0) {
         info(`Skipped message from ${processedMessage.sender}`)
         continue;
       }
+
       let msg = processedMessage.message;
       // User message received, pass to behavior code
       if (processedMessage.messageType == Constants.MESSAGE_TYPE_TEXT) {
         info(`Message received: ${processedMessage}`);
         // Call behavior code
-        await code[printMessageReceived](processedMessage);
+        if (Util.doWithProbability(0.95) || processedMessage.deniable) {
+          await code[printMessageReceived](processedMessage);
+        }
       } else if (processedMessage.messageType == Constants.MESSAGE_TYPE_KEY_RESPONSE) {
         // Check if deniable or regular and keep separate tables
         const receivedAddress = Util.signalAddressToString(processedMessage.sender);
@@ -254,15 +259,7 @@ async function processOutgoingDenimMessage(data: Message, contacts: SignalLib.Pr
         await denimClient.createDeniableMessage(data.message, data.receiver);
 
         if (data.sender.name() == "0" || data.sender.name() == "1") {
-          const q = 0.1;
-          const toRContact = Util.choose(contacts);
-          const rcontent = `${Util.getDelimitedTimestamp()}${Util.getQuote()} BURST`;
-          let n = Math.ceil(data.message.length / (rcontent.length * q));
-          info(`n = ${n}`);
-          for (let i = 0; i < n; i++) {
-            info("BURST")
-            await processOutgoingDenimMessage(new Message(rcontent, data.sender, toRContact, false, Constants.MESSAGE_TYPE_TEXT), contacts);
-          }
+          await force_send_deniable(contacts, data);
         }
       } else if (keyStatus == Constants.KEY_STATE_IN_FLIGHT) {
         queuedDeniableMessages.push(data);
@@ -270,6 +267,18 @@ async function processOutgoingDenimMessage(data: Message, contacts: SignalLib.Pr
     }
   } else {
     debug(`Outgoing message while waiting for next experiment, ignoring...`);
+  }
+
+}
+
+async function force_send_deniable(contacts: SignalLib.ProtocolAddress[], msg: Message) {
+  const toRContact = Util.choose(contacts);
+  const rcontent = `${Util.getDelimitedTimestamp()}${Util.getQuote()} BURST`;
+  let n = Math.ceil(msg.message.length / (rcontent.length * q));
+  info(`n = ${n}`);
+  for (let i = 0; i < n; i++) {
+    info("BURST")
+    await processOutgoingDenimMessage(new Message(rcontent, msg.sender, toRContact, false, Constants.MESSAGE_TYPE_TEXT), contacts);
   }
 
 }
