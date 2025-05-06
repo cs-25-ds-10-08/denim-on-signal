@@ -1,11 +1,11 @@
 {
-    "number_of_clients":6,
+    "number_of_clients":10,
     "experiment_duration_ms":480000,
     "event_ticks_ms":1000,
     "regular_message_per_tick":1,
     "deniable_message_per_tick":1,
     "regular_behavior_probability":1,
-    "deniable_behavior_probability":0,
+    "deniable_behavior_probability":0.1,
     "number_regular_ephemerals":10,
     "number_deniable_ephemerals":20,
     "message_length":1,

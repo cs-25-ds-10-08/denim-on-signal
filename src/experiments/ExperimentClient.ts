@@ -34,7 +34,9 @@ const error = x => logger.error(x);
 const WebSocketClient = require('websocket').client;
 
 const printMessageReceived = "messageReceived";
-const q = 0.1;
+const q = 0.12;
+let paused = false;
+const delay = 200;
 
 type t = (x: string | Uint8Array) => void;
 
@@ -95,6 +97,7 @@ function initExperimentClient(onMessage, initialMessage, serverAddress, protocol
 
     client.on('connect', (connection) => {
       info('Connected to ' + serverAddress);
+      // connection.socket.setNoDelay(true);
       serverConnections.set(serverAddress, connection);
       connection.send(initialMessage);
       connection.on('error', (errorMessage) => {
@@ -132,8 +135,6 @@ function initExperimentClient(onMessage, initialMessage, serverAddress, protocol
 }
 
 async function processIncomingDenimMessage(data) {
-  let received = Util.getRelativeTimeMicroseconds();
-
   // Defensive chec to make sure experiment is running...
   if (stateExperimentOngoing) {
     // Deserialize message
@@ -147,12 +148,11 @@ async function processIncomingDenimMessage(data) {
         continue;
       }
 
-      let msg = processedMessage.message;
       // User message received, pass to behavior code
       if (processedMessage.messageType == Constants.MESSAGE_TYPE_TEXT) {
         info(`Message received: ${processedMessage}`);
         // Call behavior code
-        if (Util.doWithProbability(0.95) || processedMessage.deniable) {
+        if (Util.doWithProbability(0.95)) {
           await code[printMessageReceived](processedMessage);
         }
       } else if (processedMessage.messageType == Constants.MESSAGE_TYPE_KEY_RESPONSE) {
@@ -168,6 +168,9 @@ async function processIncomingDenimMessage(data) {
             Util.signalAddressToString(msg.receiver) === receivedAddress);
 
           for (const msg of toSend) {
+            if (msg.message.search("BURST") == 0) {
+              await new Promise(r => setTimeout(r, delay));
+            }
             info(`Sending queued regular message: ${msg}`);
             const sessionOngoing = (await denimClient.regularSessionStore.getSession(msg.receiver)).hasCurrentState();
             info(`Regular session started: ${sessionOngoing}`);
@@ -216,69 +219,90 @@ async function processIncomingDenimMessage(data) {
   }
 }
 
-async function processOutgoingDenimMessage(data: Message, contacts: SignalLib.ProtocolAddress[]) {
+async function processOutgoingDenimMessage(data: Message) {
   // Defensive check to make sure experiment is running...
   if (stateExperimentOngoing) {
-    const receiverAddress = Util.signalAddressToString(data.receiver);
+    while (true) {
+      if (paused) {
+        await new Promise(r => setTimeout(r, 10));
+        continue;
+      }
+      paused = true;
 
-    if (data.deniable == false) { // Regular messages
-      let keyStatus = regularKeys.get(receiverAddress);
-      let denimMsg: Uint8Array;
-      if (keyStatus == null) { // If there's no entry, we haven't requested keys for this user
-        regularKeys.set(receiverAddress, Constants.KEY_STATE_IN_FLIGHT);
-        denimMsg = denimClient.createKeyRequest(data.receiver);
-        queuedRegularMessages.push(data);
-        // Defensive check to make sure experiment is running...
-        if (stateExperimentOngoing) {
-          info(`${denimClient.address.name()} requesting regular key for ${receiverAddress}`);
-          denimSend(denimMsg);
-        } else {
-          error(`${getPrintName()} attempted to send KEY_REQUEST after run ended`);
-        }
-      } else if (keyStatus == Constants.KEY_STATE_RECEIVED) {
-        denimMsg = await denimClient.createRegularMessage(data.message, data.receiver);
-        // Defensive check to make sure experiment is running...
-        if (stateExperimentOngoing) {
-          info(`${denimClient.address.name()} sending regular message for ${receiverAddress}`)
-          denimSend(denimMsg);
-        } else {
-          error(`${getPrintName()} attempted to send message after run ended`);
-        }
-      } else if (keyStatus == Constants.KEY_STATE_IN_FLIGHT) {
-        queuedRegularMessages.push(data);
+      await new Promise(r => setTimeout(r, delay));
+      const receiverAddress = Util.signalAddressToString(data.receiver);
+
+      if (data.deniable == false) { // Regular messages
+        await send_regular(receiverAddress, data);
+      } else { // Deniable messages
+        await send_deniable(this.regularContacts, receiverAddress, data);
       }
 
-    } else { // Deniable messages
-      let keyStatus = deniableKeys.get(receiverAddress);
-      if (keyStatus == null) {
-        deniableKeys.set(receiverAddress, Constants.KEY_STATE_IN_FLIGHT);
-        info(`${denimClient.address.name()} queuing deniable key request for ${receiverAddress}`);
-        denimClient.queueDeniableKeyRequest(data.receiver);
-        queuedDeniableMessages.push(data);
-      } else if (keyStatus == Constants.KEY_STATE_RECEIVED) {
-        await denimClient.createDeniableMessage(data.message, data.receiver);
-
-        if (data.sender.name() == "0" || data.sender.name() == "1") {
-          await force_send_deniable(contacts, data);
-        }
-      } else if (keyStatus == Constants.KEY_STATE_IN_FLIGHT) {
-        queuedDeniableMessages.push(data);
-      }
+      paused = false;
+      break;
     }
   } else {
     debug(`Outgoing message while waiting for next experiment, ignoring...`);
   }
+}
 
+async function send_regular(receiverAddress: string, data: Message) {
+  let keyStatus = regularKeys.get(receiverAddress);
+  let denimMsg: Uint8Array;
+  if (keyStatus == null) { // If there's no entry, we haven't requested keys for this user
+    regularKeys.set(receiverAddress, Constants.KEY_STATE_IN_FLIGHT);
+    denimMsg = denimClient.createKeyRequest(data.receiver);
+    queuedRegularMessages.push(data);
+    // Defensive check to make sure experiment is running...
+    if (stateExperimentOngoing) {
+      info(`${denimClient.address.name()} requesting regular key for ${receiverAddress}`);
+      denimSend(denimMsg);
+    } else {
+      error(`${getPrintName()} attempted to send KEY_REQUEST after run ended`);
+    }
+  } else if (keyStatus == Constants.KEY_STATE_RECEIVED) {
+    denimMsg = await denimClient.createRegularMessage(data.message, data.receiver);
+    // Defensive check to make sure experiment is running...
+    if (stateExperimentOngoing) {
+      info(`${denimClient.address.name()} sending regular message for ${receiverAddress}`)
+      denimSend(denimMsg);
+    } else {
+      error(`${getPrintName()} attempted to send message after run ended`);
+    }
+  } else if (keyStatus == Constants.KEY_STATE_IN_FLIGHT) {
+    queuedRegularMessages.push(data);
+  }
+}
+
+async function send_deniable(regularContacts: SignalLib.ProtocolAddress[], receiverAddress: string, data: Message) {
+  let keyStatus = deniableKeys.get(receiverAddress);
+  if (keyStatus == null) {
+    deniableKeys.set(receiverAddress, Constants.KEY_STATE_IN_FLIGHT);
+    info(`${denimClient.address.name()} queuing deniable key request for ${receiverAddress}`);
+    denimClient.queueDeniableKeyRequest(data.receiver);
+    queuedDeniableMessages.push(data);
+  } else if (keyStatus == Constants.KEY_STATE_RECEIVED) {
+    await denimClient.createDeniableMessage(data.message, data.receiver);
+
+    //if (data.sender.name() == "0" || data.sender.name() == "1") {
+    await force_send_deniable(regularContacts, data);
+    //}
+  } else if (keyStatus == Constants.KEY_STATE_IN_FLIGHT) {
+    queuedDeniableMessages.push(data);
+  }
 }
 
 async function force_send_deniable(contacts: SignalLib.ProtocolAddress[], msg: Message) {
-  const toRContact = Util.choose(contacts);
+  let toRContact: SignalLib.ProtocolAddress;
   const rcontent = `${Util.getDelimitedTimestamp()}${Util.getQuote()} BURST`;
   let n = Math.ceil(msg.message.length / (rcontent.length * q));
+  toRContact = Util.choose(contacts);
+  const receiverAddress = Util.signalAddressToString(toRContact);
   info(`n = ${n}`);
   for (let i = 0; i < n; i++) {
     info("BURST")
-    await processOutgoingDenimMessage(new Message(rcontent, msg.sender, toRContact, false, Constants.MESSAGE_TYPE_TEXT), contacts);
+    await new Promise(r => setTimeout(r, 10));
+    await send_regular(receiverAddress, new Message(rcontent, msg.sender, toRContact, false, Constants.MESSAGE_TYPE_TEXT))
   }
 
 }
@@ -374,7 +398,6 @@ const onMessage = async (data) => {
 
       // Let dispatcher know setup is done
       send(Constants.CLIENT_READY);
-
     } else if (content.includes(Constants.SERVER_START)) {
       // Fresh data structures
       cleanUp();

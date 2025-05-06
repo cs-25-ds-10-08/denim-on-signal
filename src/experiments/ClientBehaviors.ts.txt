@@ -78,6 +78,6 @@ this.bazaar = async (isDeniable) => {
     }
     const toContact = classArgs.Util.choose(contacts);
     const content = `${classArgs.Util.getDelimitedTimestamp()}${classArgs.Util.getQuote()}`;
-    await classArgs.send(new classArgs.Message(content, classArgs.clientName, toContact, isDeniable, classArgs.Constants.MESSAGE_TYPE_TEXT), classArgs.regularContacts);
+    await classArgs.send(new classArgs.Message(content, classArgs.clientName, toContact, isDeniable, classArgs.Constants.MESSAGE_TYPE_TEXT));
 }
 

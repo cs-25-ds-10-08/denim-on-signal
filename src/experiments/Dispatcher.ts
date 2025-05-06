@@ -123,7 +123,11 @@ function sendInstructions() {
       let copy = { ...instructions };
 
       copy.client_addresses_regular = regular_groups[i % 2];
-      copy.client_addresses_deniable = deniable_groups[Math.floor(i++ / 2)];
+      copy.client_addresses_deniable = deniable_groups[Math.floor(i / 2)];
+
+      console.log(`${i}: ${copy.client_addresses_regular}: ${copy.client_addresses_deniable}`)
+
+      i++;
 
       connection.send(Constants.SERVER_INSTRUCTIONS + "\n" + JSON.stringify(copy));
     }
